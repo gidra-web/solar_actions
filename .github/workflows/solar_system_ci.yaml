@@ -1,0 +1,84 @@
+name: Solar Workflow
+
+on:
+  workflow_dispatch: 
+  push:
+    branches:
+      - 'feature/*'
+  pull_request:
+    branches: 
+      - main
+env:
+  MONGO_URI: 'mongodb+srv://supercluster.d83jj.mongodb.net/superData'
+  MONGO_USERNAME: ${{ vars.MONGO_USERNAME }}
+  MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
+
+jobs:
+  unit-test:
+    name: Unit Test
+    strategy:
+      matrix:
+        node-version: [20, 22]
+        os: [ubuntu-latest]
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js - ${{ matrix.node-version}}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+    
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm install
+      - run: ls -ltr 
+
+      - name: Run unit tests
+        run: npm run test
+
+      - name: Archive unit test results
+        if:  always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mocha-Test-Result
+          path: test-results.xml
+
+  code-coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js - 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+    
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run code coverage
+        continue-on-error: true
+        run: npm run coverage
+
+      - name: Archive code coverage results
+        if:  always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Code-Coverage-Report
+          path: coverage
