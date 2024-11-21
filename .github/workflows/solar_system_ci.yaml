@@ -155,44 +155,38 @@ jobs:
           tags: ${{ vars.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
 
   dev-deploy:
+    if: contains(github.ref, 'feature/')
     needs: docker
+    uses: .github/workflows/env-deployment.yaml
+
+  dev-integration-testing:
+    if: contains(github.ref, 'feature/')
+    name: Dev Integration Testing
+    needs: dev-deploy
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: K8s cli
-        uses: azure/setup-kubectl@v4
-        with:
-          version: "v1.26.0"
-
-      - name: Set kubeconfig file
-        uses: azure/k8s-set-context@v4
-        with:
-          method: kubeconfig
-          kubeconfig: ${{ secrets.KUBECONFIG }}
-
-      - name: Details abt nodes
-        run: |
-          echo ------------------------
-          kubectl get nodes
-
-      - name: Save Nginx Ingress Controller IP as a GITHUB Environment Variable
-        run: |
-          echo "INGRESS_IP=$(kubectl -n ingress-nginx get services ingress-nginx-controller -o jsonpath="{.status.loadBalancer.ingress[0].ip}")" >> $GITHUB_ENV
-
-      - name: Replace Token in Manifest files
-        uses: cschleiden/replace-tokens@v1
-        with:
-          tokenPrefix: "_{_"
-          tokenSuffix: "_}_"
-          files: '["kubernetes/development/*.yaml"]'
+      - name: Test URL Output using CURL and JQ
         env:
-          NAMESPACE: ${{ vars.NAMESPACE }}
-          REPLICAS: ${{ vars.REPLICAS }}
-          IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
-          INGRESS_IP: ${{ env.INGRESS_IP }}
-          
-      - name: Check files
+          URL: ${{ needs.dev-deploy.outputs.APP_INGRESS_URL }}
         run: |
-          cat kubernetes/development/*.yaml
+          echo $URL
+          echo "--------------------------------------------"
+          curl https://$URL/live -s -k | jq -r .status | grep -i live
+  prod-deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: docker
+    uses: .github/workflows/env-deployment.yaml
+
+  prod-integration-testing:
+    if: github.ref == 'refs/heads/main'
+    name: Prod Integration Testing
+    needs: prod-deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test URL Output using CURL and JQ
+        env:
+          URL: ${{ needs.prod-deploy.outputs.APP_INGRESS_URL }}
+        run: |
+          echo $URL
+          echo "--------------------------------------------"
+          curl https://$URL/live -s -k | jq -r .status | grep -i live
